@@ -29,5 +29,4 @@ if len(uploaded_files) == 2:
 
     st.header("color transfered image")
     final_img = transform(imarray_in, imarray_ref)
-    print(final_img)
     st.image(final_img, use_column_width=True)

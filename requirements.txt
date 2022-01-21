@@ -1,5 +1,6 @@
+Pillow
 matplotlib
 streamlit
 pandas
 numpy
-PIL
+
