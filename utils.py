@@ -1,63 +1,51 @@
 import numpy as np
-from PIL import Image
 import matplotlib.pyplot as plt
+from PIL import Image
+import ot
+from sklearn.cluster import MiniBatchKMeans
 
 
-def pic_as_list(array):
-    height, width = array.shape
-    list_of_pixels = []
-    for x in range(height):
-        for y in range(width):
-            color = array[x, y]
-            list_of_pixels.append([x, y, color])
-    return sorted(list_of_pixels, key=lambda x: (x[2], x[0], x[1]))
-
-
-def transport_colors(start_array, target_array):
-    height, width = start_array.shape
-    list_start = pic_as_list(start_array)
-    hist_target = [(target_array == color).sum() for color in range(256)]
-
-    ind = 0
-    for color in range(256):
-        while hist_target[color] > 0:
-            list_start[ind][2] = color
-            hist_target[color] = hist_target[color] - 1
-            ind = ind + 1
-
-    target = np.zeros((height, width))
-    for pixel in list_start:
-        x, y, color = pixel
-        target[x, y] = color
-    return target
-
-
-def transform(in_array, ref_array):
-    """
-    ndarray, ndarray -> PIL.image
-    """
-    height = in_array.shape[0]
-    width = in_array.shape[1]
-    final_picture = np.zeros((height, width, 3))
-    for i in range(3):
-        final_picture[:, :, i] = transport_colors(
-            in_array[:, :, i], ref_array[:, :, i])
-    final_picture = final_picture.astype(np.uint8)
-    img = Image.fromarray(final_picture)
+def resize_img(img):
+    resolution = 480 * 320
+    w, h = img.size
+    r = np.sqrt(resolution / (w * h))
+    img = img.resize((int(w * r), int(h * r)))
     return img
 
 
-if __name__ == '__main__':
-    result_string = 'data/out.png'
-    start_string = 'data/input.png'
-    target_string = 'data/ref.png'
+def transform(source_img, target_img):
+    w1, h1 = source_img.size
+    x1 = np.array(source_img).reshape(-1, 3)
 
-    start_img = Image.open(start_string)
-    target_img = Image.open(target_string)
+    w2, h2 = target_img.size
+    x2 = np.array(target_img).reshape(-1, 3)
 
-    start_array = np.array(start_img)
-    target_array = np.array(target_img)
+    # クラスタリングの計算
+    n = 500
+    kmeans1 = MiniBatchKMeans(n, random_state=0)
+    kmeans1.fit(x1)
+    c1 = kmeans1.predict(x1)
+    sx1 = kmeans1.cluster_centers_
+    a = np.bincount(c1, minlength=n) / len(x1)  # 重みの計算
 
-    final_array = transform(start_array, target_array)
-    plt.imshow(final_array)
-    plt.show()
+    kmeans2 = MiniBatchKMeans(n, random_state=0)
+    kmeans2.fit(x2)
+    c2 = kmeans2.predict(x2)
+    sx2 = kmeans2.cluster_centers_
+    b = np.bincount(c2, minlength=n) / len(x2)  # 重み
+
+    # 最適輸送の計算
+    C = np.linalg.norm(sx1.reshape(-1, 1, 3) -
+                       sx2.reshape(1, -1, 3), axis=2) ** 2  # コスト行列の計算
+    P = ot.emd(a, b, C)  # 最適輸送行列の計算
+
+    csx1 = P @ sx2 / a.reshape(n, 1)  # 式 (2.52)
+
+    cx1 = x1.copy()
+    for i in range(len(x1)):
+        j = c1[i]
+        cx1[i] = np.maximum(0, np.minimum(
+            csx1[j] + x1[i] - sx1[j], 255))  # 式 (2.51)
+
+    res = Image.fromarray(cx1.reshape(h1, w1, 3))
+    return res

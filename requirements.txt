@@ -3,4 +3,5 @@ matplotlib
 streamlit
 pandas
 numpy
+POT
 
