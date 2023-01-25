@@ -4,5 +4,4 @@ streamlit
 pandas
 numpy
 POT
-sklearn
-
+scikit-learn
